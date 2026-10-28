@@ -10,7 +10,7 @@ st.set_page_config(page_title="🀄 12人麻將賽事管理系統", page_icon="�
 def init_connection():
     creds_dict = dict(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
-    spreadsheet = client.open("麻將盃資料庫py")
+    spreadsheet = client.open("12人麻將大賽紀錄")
     return spreadsheet
 
 try:
@@ -25,26 +25,36 @@ except Exception as e:
 
 st.title("🀄 12人麻將大賽 - 雲端管理系統")
 
-# --- 側邊欄導航 (新增多個功能) ---
-menu = st.sidebar.selectbox(
-    "功能選單", 
-    [
-        "📊 排行榜", 
-        "📝 登記戰績", 
-        "💰 東錢與場地費", 
-        "👥 參賽者名單", 
-        "📜 歷程比賽紀錄", 
-        "🏆 歷屆排名", 
-        "📅 賽季月曆", 
-        "📖 比賽規則"
-    ]
-)
+# --- 初始化頁面狀態 ---
+if "menu" not in st.session_state:
+    st.session_state.menu = "📊 排行榜"
+
+# --- 側邊欄按鈕導航 ---
+st.sidebar.header("🎯 功能選單")
+
+menu_items = [
+    "📊 排行榜", 
+    "📝 登記戰績", 
+    "💰 東錢與場地費", 
+    "👥 參賽者名單", 
+    "📜 歷程比賽紀錄", 
+    "🏆 歷屆排名", 
+    "📅 賽季月曆", 
+    "📖 比賽規則"
+]
+
+for item in menu_items:
+    # 讓按鈕填滿側邊欄寬度，手機更好按
+    # 如果是目前所在的頁面，可以用不同樣式或直接點擊切換
+    if st.sidebar.button(item, use_container_width=True):
+        st.session_state.menu = item
+
+menu = st.session_state.menu
 
 # 讀取「參賽者名單」Sheet 的 A 欄 (動態增減)
 def get_players():
     data = sheet_players.get_all_values()
     if data and len(data) > 1:
-        # 假設第一列是標題，從第二列開始取 A 欄 (index 0)
         players = [row[0] for row in data[1:] if row and row[0].strip() != ""]
         return players
     return []
@@ -60,18 +70,14 @@ if menu == "📊 排行榜":
     
     if records:
         df = pd.DataFrame(records)
-        # 檢查是否有預期欄位 (時間, 參賽者名字, 金額, 將數)
         if {"參賽者名字", "金額", "將數"}.issubset(df.columns):
-            # 確保金額與將數為數值型態
             df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0)
             df["將數"] = pd.to_numeric(df["將數"], errors="coerce").fillna(0)
             
-            # 群組加總
             summary = df.groupby("參賽者名字")[["金額", "將數"]].sum().reset_index()
             summary.columns = ["選手名稱", "總淨利金額 ($)", "累積將數"]
             summary = summary.sort_values(by="總淨利金額 ($)", ascending=False).reset_index(drop=True)
             
-            # 加上名次編號
             summary.index = summary.index + 1
             summary.index.name = "名次"
             
@@ -87,7 +93,7 @@ elif menu == "📝 登記戰績":
     st.write("紀錄會直接寫入 Google 試算表的 **「戰績」** 頁籤 (A欄:時間, B欄:參賽者名字, C欄:金額, D欄:將數)")
     
     if not players_list:
-        st.warning("目前「參賽者名單」無人，請先至左側【👥 參賽者名單】新增選手！")
+        st.warning("目前「參賽者名單」無人，請先至左側點擊【👥 參賽者名單】新增選手！")
     else:
         with st.form("record_form"):
             col1, col2 = st.columns(2)
@@ -130,12 +136,11 @@ elif menu == "💰 東錢與場地費":
     else:
         st.info("目前尚無收支紀錄。")
 
-# ================= 4. 參賽者名單 (動態增減) =================
+# ================= 4. 參賽者名單 =================
 elif menu == "👥 參賽者名單":
     st.header("👥 參賽者名單管理")
     st.write("直接讀取與寫入 Google 試算表的 **「參賽者名單」** A 欄。你可以自由新增或刪除選手。")
     
-    # 顯示目前名單
     st.subheader("目前參賽名單：")
     if players_list:
         for idx, p in enumerate(players_list, 1):
@@ -165,9 +170,8 @@ elif menu == "👥 參賽者名單":
         remove_btn = st.form_submit_button("從名單移除")
         
         if remove_btn and target_to_remove != "請選擇":
-            # 重新取得所有資料以對應正確行數
             all_rows = sheet_players.get_all_values()
-            new_rows = [all_rows[0]] # 保留標題
+            new_rows = [all_rows[0]]
             for row in all_rows[1:]:
                 if row and row[0] != target_to_remove:
                     new_rows.append(row)

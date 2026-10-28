@@ -2,23 +2,17 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread
-from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="🀄 12人麻將賽事管理系統", page_icon="🀄", layout="wide")
 
-# --- Google 試算表連線設定 ---
+# --- Google 試算表連線設定 (修改這裡) ---
 @st.cache_resource
 def init_connection():
-    scope = [
-        "https://www.spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    # 從 Streamlit Secrets 讀取憑證
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=scope
-    )
-    client = gspread.authorize(creds)
-    # 請改成你的 Google 試算表檔名
+    # 直接將 Streamlit Secrets 的字典資料傳給 gspread 處理
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    client = gspread.service_account_from_dict(creds_dict)
+    
+    # 請確認你的 Google 試算表檔名完全一致
     spreadsheet = client.open("麻將盃資料庫py")
     return spreadsheet
 

@@ -59,21 +59,18 @@ def get_players():
 
 players_list = get_players()
 
-# ================= 1. 排行榜 =================
+# ================= 1. 排行榜 (小卡排版) =================
 if menu == "📊 排行榜":
     st.header("📊 即時總排行榜")
-    st.write("依據「戰績」頁籤的 **C欄 (金額)** 進行累積運算與排名，並顯示總將數。")
+    st.write("依據「戰績」頁籤的 **C欄 (金額)** 進行累積運算與排名，戰績即時卡片化！")
     
-    # 抓取戰績頁籤的所有原始資料（包含標題列）
     raw_records = sheet_record.get_all_values()
     
     if raw_records and len(raw_records) > 1:
-        # 排除標題列，抓取資料
         data_rows = raw_records[1:]
         
         parsed_data = []
         for row in data_rows:
-            # 確保該列至少有名字(B欄, index 1)、金額(C欄, index 2)、將數(D欄, index 3)
             if len(row) >= 4:
                 name = row[1].strip()
                 try:
@@ -90,17 +87,52 @@ if menu == "📊 排行榜":
         
         if parsed_data:
             df = pd.DataFrame(parsed_data)
-            # 依據選手名稱群組加總 C欄金額 與 D欄將數
             summary = df.groupby("選手名稱")[["金額", "將數"]].sum().reset_index()
-            summary.columns = ["選手名稱", "總累積金額 ($)", "累積將數"]
-            # 依金額由高到低排序
-            summary = summary.sort_values(by="總累積金額 ($)", ascending=False).reset_index(drop=True)
+            summary.columns = ["選手名稱", "總累積金額", "累積將數"]
+            summary = summary.sort_values(by="總累積金額", ascending=False).reset_index(drop=True)
             
-            # 調整名次從 1 開始
-            summary.index = summary.index + 1
-            summary.index.name = "名次"
+            # --- 抽換為小卡網格 (Cards Layout) ---
+            # 每行放 3 張小卡
+            cols_per_row = 3
+            for i in range(0, len(summary), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    idx = i + j
+                    if idx < len(summary):
+                        row_data = summary.iloc[idx]
+                        name = row_data["選手名稱"]
+                        amount = row_data["總累積金額"]
+                        games = int(row_data["累積將數"])
+                        rank = idx + 1
+                        
+                        # 依名次給予不同的裝飾表情
+                        if rank == 1:
+                            rank_badge = "👑 冠軍"
+                        elif rank == 2:
+                            rank_badge = "🥈 亞軍"
+                        elif rank == 3:
+                            rank_badge = "🥉 季軍"
+                        else:
+                            rank_badge = f"第 {rank} 名"
+                            
+                        # 金額顏色正負分流
+                        color_style = "color: green;" if amount >= 0 else "color: red;"
+                        
+                        with cols[j]:
+                            # 使用 st.container(border=True) 做出精美的小卡框
+                            with st.container(border=True):
+                                st.subheader(f"{rank_badge}")
+                                st.markdown(f"### **{name}**")
+                                st.markdown(f"累積金額: <span style='{color_style} font-size: 20px; font-weight: bold;'>${amount:,.0f}</span>", unsafe_allow_html=True)
+                                st.text(f"📊 累計將數: {games} 將")
             
-            st.dataframe(summary, use_container_width=True)
+            st.divider()
+            # 同時保留下方完整表格供核對
+            with st.expander("📋 檢視傳統數據表格"):
+                display_df = summary.copy()
+                display_df.index = display_df.index + 1
+                display_df.index.name = "名次"
+                st.dataframe(display_df, use_container_width=True)
         else:
             st.info("「戰績」頁籤中目前尚無有效的對戰數據。")
     else:
@@ -127,7 +159,6 @@ elif menu == "📝 登記戰績":
             
             if submitted:
                 now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # 寫入兩筆資料：A欄時間, B欄名字, C欄金額, D欄將數
                 sheet_record.append_row([now_time, winner, win_amount, 1])
                 sheet_record.append_row([now_time, loser, lose_amount, 1])
                 st.success(f"成功登記！ {winner} 獲得 ${win_amount}，{loser} 扣除 ${abs(lose_amount)}")

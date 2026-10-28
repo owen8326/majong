@@ -19,7 +19,7 @@ def init_connection():
     )
     client = gspread.authorize(creds)
     # 請改成你的 Google 試算表檔名
-    spreadsheet = client.open("12人麻將大賽紀錄")
+    spreadsheet = client.open("麻將盃資料庫py")
     return spreadsheet
 
 try:

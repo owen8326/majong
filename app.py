@@ -44,8 +44,6 @@ menu_items = [
 ]
 
 for item in menu_items:
-    # 讓按鈕填滿側邊欄寬度，手機更好按
-    # 如果是目前所在的頁面，可以用不同樣式或直接點擊切換
     if st.sidebar.button(item, use_container_width=True):
         st.session_state.menu = item
 
@@ -64,26 +62,47 @@ players_list = get_players()
 # ================= 1. 排行榜 =================
 if menu == "📊 排行榜":
     st.header("📊 即時總排行榜")
-    st.write("依據「戰績」頁籤自動統計，按累計金額排序，並顯示總將數。")
+    st.write("依據「戰績」頁籤的 **C欄 (金額)** 進行累積運算與排名，並顯示總將數。")
     
-    records = sheet_record.get_all_records()
+    # 抓取戰績頁籤的所有原始資料（包含標題列）
+    raw_records = sheet_record.get_all_values()
     
-    if records:
-        df = pd.DataFrame(records)
-        if {"參賽者名字", "金額", "將數"}.issubset(df.columns):
-            df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0)
-            df["將數"] = pd.to_numeric(df["將數"], errors="coerce").fillna(0)
+    if raw_records and len(raw_records) > 1:
+        # 排除標題列，抓取資料
+        data_rows = raw_records[1:]
+        
+        parsed_data = []
+        for row in data_rows:
+            # 確保該列至少有名字(B欄, index 1)、金額(C欄, index 2)、將數(D欄, index 3)
+            if len(row) >= 4:
+                name = row[1].strip()
+                try:
+                    amount = float(row[2]) if row[2].strip() != "" else 0.0
+                except ValueError:
+                    amount = 0.0
+                try:
+                    games = float(row[3]) if row[3].strip() != "" else 1.0
+                except ValueError:
+                    games = 1.0
+                
+                if name:
+                    parsed_data.append({"選手名稱": name, "金額": amount, "將數": games})
+        
+        if parsed_data:
+            df = pd.DataFrame(parsed_data)
+            # 依據選手名稱群組加總 C欄金額 與 D欄將數
+            summary = df.groupby("選手名稱")[["金額", "將數"]].sum().reset_index()
+            summary.columns = ["選手名稱", "總累積金額 ($)", "累積將數"]
+            # 依金額由高到低排序
+            summary = summary.sort_values(by="總累積金額 ($)", ascending=False).reset_index(drop=True)
             
-            summary = df.groupby("參賽者名字")[["金額", "將數"]].sum().reset_index()
-            summary.columns = ["選手名稱", "總淨利金額 ($)", "累積將數"]
-            summary = summary.sort_values(by="總淨利金額 ($)", ascending=False).reset_index(drop=True)
-            
+            # 調整名次從 1 開始
             summary.index = summary.index + 1
             summary.index.name = "名次"
             
             st.dataframe(summary, use_container_width=True)
         else:
-            st.warning("「戰績」頁籤的欄位名稱需包含：時間、參賽者名字、金額、將數。")
+            st.info("「戰績」頁籤中目前尚無有效的對戰數據。")
     else:
         st.info("目前尚無任何戰績資料，快去登記第一場吧！")
 
@@ -108,6 +127,7 @@ elif menu == "📝 登記戰績":
             
             if submitted:
                 now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # 寫入兩筆資料：A欄時間, B欄名字, C欄金額, D欄將數
                 sheet_record.append_row([now_time, winner, win_amount, 1])
                 sheet_record.append_row([now_time, loser, lose_amount, 1])
                 st.success(f"成功登記！ {winner} 獲得 ${win_amount}，{loser} 扣除 ${abs(lose_amount)}")
@@ -149,7 +169,7 @@ elif menu == "👥 參賽者名單":
         st.info("目前尚無選手。")
         
     st.divider()
-    st.subheader("➕ 新增或更新選手")
+    st.subheader("➕ 新增選手")
     
     with st.form("add_player_form"):
         new_player_name = st.text_input("輸入新選手名字")
@@ -164,7 +184,7 @@ elif menu == "👥 參賽者名單":
                 st.rerun()
                 
     st.divider()
-    st.subheader("🗑️ 刪除選手或重設名單")
+    st.subheader("🗑️ 刪除選手")
     with st.form("remove_player_form"):
         target_to_remove = st.selectbox("選擇要刪除的選手", ["請選擇"] + players_list)
         remove_btn = st.form_submit_button("從名單移除")
@@ -226,5 +246,5 @@ elif menu == "📖 比賽規則":
     * **遲到**：超過約定時間 15 分鐘扣點。
     
     ### 3. 賽事積分
-    * 每打完一將，務必由當桌人員透過本系統即時登記【贏家】與【輸家/金額】，系統將自動計入總排行榜與累計將數。
+    * 每打完一將，務必由當桌人員透過本系統即時登記【贏家】與【輸家/金額】，系統將自動依 C 欄金額計入總排行榜與累積將數。
     """)

@@ -10,7 +10,7 @@ st.set_page_config(page_title="🀄 12人麻將賽事管理系統", page_icon="�
 def init_connection():
     creds_dict = dict(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
-    spreadsheet = client.open("12人麻將大賽紀錄")
+    spreadsheet = client.open("麻將盃資料庫py")
     return spreadsheet
 
 try:
